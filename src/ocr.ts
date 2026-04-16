@@ -78,16 +78,16 @@ export async function extractTextFromImages(
 ): Promise<Array<{ name: string; result: OCRResult }>> {
   const results: Array<{ name: string; result: OCRResult }> = [];
 
-  // Process sequentially to avoid overwhelming the AI service
-  for (const image of images) {
-    const result = await extractTextFromImage(ai, image.buffer, image.name, options);
-    results.push({
-      name: image.name,
-      result,
-    });
-
-    // Small delay between requests to be polite
-    await sleep(100);
+  // Process in batches of 5 concurrently to stay within AI rate limits
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < images.length; i += BATCH_SIZE) {
+    const batch = images.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(image => extractTextFromImage(ai, image.buffer, image.name, options))
+    );
+    for (let j = 0; j < batch.length; j++) {
+      results.push({ name: batch[j].name, result: batchResults[j] });
+    }
   }
 
   return results;
