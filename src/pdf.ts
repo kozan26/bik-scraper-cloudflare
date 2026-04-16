@@ -1,10 +1,9 @@
 /**
- * PDF generator with labels and optional invisible OCR text layer
+ * PDF generator with newspaper labels
  */
 
-import { PDFDocument, PDFPage, PDFFont, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, PDFFont, rgb, StandardFonts } from 'pdf-lib';
 import type { ImageData } from './types';
-import type { OCRResult } from './ocr';
 
 const FONT_REGULAR_URL = 'https://cdn.jsdelivr.net/gh/google/fonts@main/apache/opensans/static/OpenSans-Regular.ttf';
 const FONT_BOLD_URL    = 'https://cdn.jsdelivr.net/gh/google/fonts@main/apache/opensans/static/OpenSans-Bold.ttf';
@@ -36,7 +35,6 @@ interface PDFOptions {
   dateLabel: string;
   maxWidth?: number;
   maxHeight?: number;
-  ocrResults?: Array<{ name: string; result: OCRResult }>;
 }
 
 function calculateResizedDimensions(width: number, height: number, maxWidth?: number, maxHeight?: number): { width: number; height: number } {
@@ -55,19 +53,6 @@ function detectImageFormat(buffer: ArrayBuffer): 'png' | 'jpeg' | null {
   return null;
 }
 
-function addInvisibleTextLayer(page: PDFPage, text: string, font: PDFFont, pageWidth: number, pageHeight: number, bannerHeight: number): void {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  if (lines.length === 0) return;
-  const margin = 12;
-  const usableHeight = pageHeight - bannerHeight - margin * 2;
-  const lineStep = usableHeight / lines.length;
-  const fontSize = Math.min(11, Math.max(6, lineStep * 0.75));
-  for (let i = 0; i < lines.length; i++) {
-    const y = pageHeight - margin - fontSize - i * lineStep;
-    if (y < bannerHeight + margin) break;
-    page.drawText(lines[i], { x: margin, y, size: fontSize, font, color: rgb(1, 1, 1), opacity: 0.01, maxWidth: pageWidth - margin * 2 });
-  }
-}
 
 export async function generatePDF(images: ImageData[], options: PDFOptions): Promise<Uint8Array> {
   if (images.length === 0) throw new Error('No images to generate PDF');
@@ -106,14 +91,7 @@ export async function generatePDF(images: ImageData[], options: PDFOptions): Pro
       page.drawText(labelText, { x: 20, y: Math.floor((bannerHeight - fontSize) / 2), size: fontSize, font: boldFont, color: rgb(0, 0, 0), maxWidth: targetWidth - 40 });
     }
 
-    if (options.ocrResults) {
-      const entry = options.ocrResults.find(r => r.name === imageData.name);
-      if (entry?.result.text) {
-        const ocrText = needsSanitize ? sanitizeTurkish(entry.result.text) : entry.result.text;
-        addInvisibleTextLayer(page, ocrText, font, targetWidth, targetHeight + bannerHeight, bannerHeight);
-        console.log(`[PDF] Invisible text layer added for: ${imageData.name} (${entry.result.text.length} chars)`);
-      }
-    }
+
   }
 
   return await pdfDoc.save();
