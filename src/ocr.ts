@@ -33,19 +33,15 @@ export async function extractTextFromImage(
   options: OCROptions = {}
 ): Promise<OCRResult> {
   const {
-    prompt = 'Extract the main headlines and text from this Turkish newspaper front page. Output only the extracted text.',
-    maxTokens = 768,
+    prompt = 'List the main headlines visible on this newspaper front page. Be brief and do not repeat yourself.',
+    maxTokens = 256,
   } = options;
 
   try {
     // Convert buffer to array format expected by Workers AI
     const imageArray = [...new Uint8Array(imageBuffer)];
 
-    const input = {
-      image: imageArray,
-      prompt,
-      max_tokens: maxTokens,
-    };
+    const input = { image: imageArray, prompt, max_tokens: maxTokens };
 
     console.log(`[OCR] Processing image for: ${newspaperName} (model: ${OCR_MODEL})`);
 
