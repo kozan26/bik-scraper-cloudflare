@@ -5,7 +5,7 @@
 
 import type { Env, Config } from './types';
 import { parseNewspapers, generateFilename } from './parser';
-import { downloadImages } from './downloader';
+import { downloadImages, downloadThumbs } from './downloader';
 import { generatePDF } from './pdf';
 import { extractTextFromImages, formatOCRResults } from './ocr';
 
@@ -142,16 +142,18 @@ async function handleScrapeWithOCR(env: Env, config: Config): Promise<Response> 
 
   console.log(`[INFO] Downloaded ${images.length}/${processItems.length} images`);
 
-  // 5. Run OCR on images
-  console.log('[INFO] Running OCR on images...');
-  const ocrResults = await extractTextFromImages(
-    env.AI,
-    images.map(img => ({ buffer: img.buffer, name: img.name }))
-  );
+  // 5. Download thumbnails for OCR (smaller than full images — better for 11B model)
+  console.log('[INFO] Downloading thumbnails for OCR...');
+  const thumbs = await downloadThumbs(processItems, config.concurrency, 15000);
+  console.log(`[INFO] Downloaded ${thumbs.length} thumbnails for OCR`);
+
+  // 6. Run OCR on thumbnails
+  console.log('[INFO] Running OCR on thumbnails...');
+  const ocrResults = await extractTextFromImages(env.AI, thumbs);
 
   console.log(`[INFO] OCR completed for ${ocrResults.length} images`);
 
-  // 6. Generate searchable PDF — OCR text embedded as invisible layer
+  // 7. Generate searchable PDF — OCR text embedded as invisible layer
   console.log('[INFO] Generating searchable PDF with OCR text layer...');
   const pdfBytes = await generatePDF(images, {
     labelBanner: config.labelBanner,
@@ -247,10 +249,11 @@ async function runDailyProcessing(env: Env, config: Config): Promise<string> {
 
     if (images.length === 0) return 'No images downloaded';
 
-    const ocrResults = await extractTextFromImages(
-      env.AI,
-      images.map(img => ({ buffer: img.buffer, name: img.name }))
-    );
+    // Download thumbnails for OCR separately (smaller payload for 11B model)
+    const thumbs = await downloadThumbs(processItems, config.concurrency, 15000);
+    console.log(`[CORE] Downloaded ${thumbs.length} thumbnails for OCR`);
+
+    const ocrResults = await extractTextFromImages(env.AI, thumbs);
 
     const pdfBytes = await generatePDF(images, {
       labelBanner: config.labelBanner,

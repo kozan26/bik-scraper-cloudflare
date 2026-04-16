@@ -160,6 +160,36 @@ export async function downloadImages(
 }
 
 /**
+ * Download thumbnail images for OCR (smaller resolution than full images).
+ * Returns buffers paired with newspaper names — suitable for passing to extractTextFromImages.
+ */
+export async function downloadThumbs(
+  items: NewspaperItem[],
+  concurrency: number = 4,
+  timeout: number = 15000
+): Promise<Array<{ buffer: ArrayBuffer; name: string }>> {
+  const results: Array<{ buffer: ArrayBuffer; name: string }> = [];
+  const queue = [...items];
+  const inProgress = new Set<Promise<void>>();
+
+  async function processItem(item: NewspaperItem): Promise<void> {
+    const buffer = await downloadImage(item.thumb, timeout, 1);
+    if (buffer) results.push({ buffer, name: item.name });
+  }
+
+  while (queue.length > 0 || inProgress.size > 0) {
+    while (queue.length > 0 && inProgress.size < concurrency) {
+      const item = queue.shift()!;
+      const promise = processItem(item).finally(() => inProgress.delete(promise));
+      inProgress.add(promise);
+    }
+    if (inProgress.size > 0) await Promise.race(inProgress);
+  }
+
+  return results;
+}
+
+/**
  * Sleep utility
  */
 function sleep(ms: number): Promise<void> {

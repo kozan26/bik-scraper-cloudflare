@@ -1,16 +1,18 @@
 /**
  * OCR functionality using Cloudflare Workers AI
- * Model: @cf/llava-hf/llava-1.5-7b-hf
+ * Model: @cf/meta/llama-3.2-11b-vision-instruct
  *
- * Switched from uform-gen2-qwen-500m (VQA model, poor OCR accuracy)
- * to llava-1.5-7b-hf (7B multimodal, much better at text extraction).
- * To use the even stronger llama-3.2-11b-vision-instruct, change OCR_MODEL below.
+ * Uses llama-3.2-11b (11B multimodal) via the messages/content format.
+ * Images are passed as base64 data-URLs inside the message content array.
+ * Thumbnails are used instead of full images to keep payload size manageable.
+ *
+ * Fallback: change OCR_MODEL to '@cf/llava-hf/llava-1.5-7b-hf' if the 11B
+ * model is not available on your account.
  */
 
 import type { Ai } from '@cloudflare/workers-types';
 
-// Change this to '@cf/meta/llama-3.2-11b-vision-instruct' for highest accuracy (slower)
-const OCR_MODEL = '@cf/llava-hf/llava-1.5-7b-hf';
+const OCR_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
 
 export interface OCROptions {
   prompt?: string;
@@ -24,7 +26,8 @@ export interface OCRResult {
 }
 
 /**
- * Extract text from an image using Cloudflare Workers AI
+ * Extract text from an image using Cloudflare Workers AI (llama-3.2-11b).
+ * The image is passed as a base64 data-URL inside a messages/content array.
  */
 export async function extractTextFromImage(
   ai: Ai,
@@ -33,22 +36,37 @@ export async function extractTextFromImage(
   options: OCROptions = {}
 ): Promise<OCRResult> {
   const {
-    prompt = 'List the main headlines visible on this newspaper front page. Be brief and do not repeat yourself.',
-    maxTokens = 256,
+    prompt = 'List the main headlines visible on this newspaper front page. Be concise and do not repeat yourself.',
+    maxTokens = 512,
   } = options;
 
   try {
-    // Convert buffer to array format expected by Workers AI
-    const imageArray = [...new Uint8Array(imageBuffer)];
+    // Convert buffer to base64 data-URL (JPEG thumbnails from BİK)
+    const bytes = new Uint8Array(imageBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
+    const dataUrl = `data:image/jpeg;base64,${base64}`;
 
-    const input = { image: imageArray, prompt, max_tokens: maxTokens };
+    const input = {
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: dataUrl } },
+            { type: 'text', text: prompt },
+          ],
+        },
+      ],
+      max_tokens: maxTokens,
+    };
 
     console.log(`[OCR] Processing image for: ${newspaperName} (model: ${OCR_MODEL})`);
 
     const response = await ai.run(OCR_MODEL as any, input) as any;
 
-    // llava returns `description`; llama-3.2-vision returns `response`
-    const extractedText = response?.description || response?.response || '';
+    // llama-3.2-vision returns `response`; llava returns `description`
+    const extractedText = response?.response || response?.description || '';
 
     if (!extractedText) {
       console.warn(`[OCR] No text extracted for: ${newspaperName}`);
