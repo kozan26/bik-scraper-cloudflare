@@ -1,0 +1,11 @@
+# Example environment variables for local development
+# Copy this file to .dev.vars and adjust as needed
+
+# LABEL_BANNER=true
+# MAX_WIDTH=2000
+# MAX_HEIGHT=0
+# CONCURRENCY=4
+# DELAY_BETWEEN_REQ=0.2
+# LIMIT_ITEMS=0
+# SKIP_IF_EXISTS=true
+# TIMEOUT_SEC=25

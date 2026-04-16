@@ -1,0 +1,30 @@
+name = "bik-scraper"
+main = "src/worker.ts"
+compatibility_date = "2024-11-18"
+compatibility_flags = ["nodejs_compat"]
+
+# Daily cron trigger — runs at 04:00 UTC = 07:00 Turkey time (UTC+3)
+# Scheduled workers get up to 15 min CPU time; no HTTP 50s timeout applies.
+# HTTP requests will be served from R2 cache after the cron runs.
+[triggers]
+crons = ["0 4 * * *"]
+
+# R2 bucket binding for storing PDFs
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "bik-newspapers"
+
+# Workers AI binding for OCR
+[ai]
+binding = "AI"
+
+# Environment variables
+[vars]
+LABEL_BANNER = "true"
+MAX_WIDTH = "2000"
+MAX_HEIGHT = "0"
+CONCURRENCY = "4"
+DELAY_BETWEEN_REQ = "0.2"
+LIMIT_ITEMS = "0"
+SKIP_IF_EXISTS = "true"
+TIMEOUT_SEC = "25"
