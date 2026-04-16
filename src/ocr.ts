@@ -33,13 +33,8 @@ export async function extractTextFromImage(
   options: OCROptions = {}
 ): Promise<OCRResult> {
   const {
-    prompt = [
-      'You are an OCR engine. Extract ALL visible text from this Turkish newspaper front page exactly as it appears.',
-      'Include every headline, subheadline, article snippet, caption, date, and page number.',
-      'Preserve the reading order (top to bottom, left to right).',
-      'Output only the extracted text — no commentary, no descriptions.',
-    ].join(' '),
-    maxTokens = 4096,
+    prompt = 'Extract the main headlines and text from this Turkish newspaper front page. Output only the extracted text.',
+    maxTokens = 768,
   } = options;
 
   try {
