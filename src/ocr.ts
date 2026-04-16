@@ -12,7 +12,7 @@
 
 import type { Ai } from '@cloudflare/workers-types';
 
-const OCR_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
+const OCR_MODEL = '@cf/llava-hf/llava-1.5-7b-hf';
 
 export interface OCROptions {
   prompt?: string;
@@ -26,8 +26,7 @@ export interface OCRResult {
 }
 
 /**
- * Extract text from an image using Cloudflare Workers AI (llama-3.2-11b).
- * The image is passed as a base64 data-URL inside a messages/content array.
+ * Extract text from an image using Cloudflare Workers AI (LLaVA 7B).
  */
 export async function extractTextFromImage(
   ai: Ai,
@@ -36,37 +35,19 @@ export async function extractTextFromImage(
   options: OCROptions = {}
 ): Promise<OCRResult> {
   const {
-    prompt = 'List the main headlines visible on this newspaper front page. Be concise and do not repeat yourself.',
-    maxTokens = 512,
+    prompt = 'List the main headlines visible on this newspaper front page. Be brief and do not repeat yourself.',
+    maxTokens = 256,
   } = options;
 
   try {
-    // Convert buffer to base64 data-URL (JPEG thumbnails from BİK)
-    const bytes = new Uint8Array(imageBuffer);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    const base64 = btoa(binary);
-    const dataUrl = `data:image/jpeg;base64,${base64}`;
-
-    const input = {
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'image_url', image_url: { url: dataUrl } },
-            { type: 'text', text: prompt },
-          ],
-        },
-      ],
-      max_tokens: maxTokens,
-    };
-
     console.log(`[OCR] Processing image for: ${newspaperName} (model: ${OCR_MODEL})`);
+
+    const input = { image: [...new Uint8Array(imageBuffer)], prompt, max_tokens: maxTokens };
 
     const response = await ai.run(OCR_MODEL as any, input) as any;
 
-    // llama-3.2-vision returns `response`; llava returns `description`
-    const extractedText = response?.response || response?.description || '';
+    // llava returns `description`
+    const extractedText = response?.description || response?.response || '';
 
     if (!extractedText) {
       console.warn(`[OCR] No text extracted for: ${newspaperName}`);

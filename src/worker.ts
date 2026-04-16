@@ -142,14 +142,12 @@ async function handleScrapeWithOCR(env: Env, config: Config): Promise<Response> 
 
   console.log(`[INFO] Downloaded ${images.length}/${processItems.length} images`);
 
-  // 5. Download thumbnails for OCR (smaller than full images — better for 11B model)
-  console.log('[INFO] Downloading thumbnails for OCR...');
-  const thumbs = await downloadThumbs(processItems, config.concurrency, 15000);
-  console.log(`[INFO] Downloaded ${thumbs.length} thumbnails for OCR`);
-
-  // 6. Run OCR on thumbnails
-  console.log('[INFO] Running OCR on thumbnails...');
-  const ocrResults = await extractTextFromImages(env.AI, thumbs);
+  // 5. Run OCR on downloaded images
+  console.log('[INFO] Running OCR on images...');
+  const ocrResults = await extractTextFromImages(
+    env.AI,
+    images.map(img => ({ buffer: img.buffer, name: img.name }))
+  );
 
   console.log(`[INFO] OCR completed for ${ocrResults.length} images`);
 
@@ -249,11 +247,10 @@ async function runDailyProcessing(env: Env, config: Config): Promise<string> {
 
     if (images.length === 0) return 'No images downloaded';
 
-    // Download thumbnails for OCR separately (smaller payload for 11B model)
-    const thumbs = await downloadThumbs(processItems, config.concurrency, 15000);
-    console.log(`[CORE] Downloaded ${thumbs.length} thumbnails for OCR`);
-
-    const ocrResults = await extractTextFromImages(env.AI, thumbs);
+    const ocrResults = await extractTextFromImages(
+      env.AI,
+      images.map(img => ({ buffer: img.buffer, name: img.name }))
+    );
 
     const pdfBytes = await generatePDF(images, {
       labelBanner: config.labelBanner,
@@ -303,6 +300,23 @@ export default {
         return new Response(JSON.stringify(config, null, 2), {
           headers: { 'Content-Type': 'application/json' },
         });
+      }
+
+      // Quick OCR test: fetches first BİK thumbnail, runs OCR, returns plain text — no R2
+      if (url.pathname === '/test-ocr') {
+        const html = await fetchHTML(config.timeoutSec);
+        const { items } = parseNewspapers(html);
+        if (items.length === 0) return new Response('No newspapers found', { status: 500 });
+        const item = items[0];
+        const res = await fetch(item.full, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        if (!res.ok) return new Response(`Thumb fetch failed: ${res.status}`, { status: 500 });
+        const buffer = await res.arrayBuffer();
+        const { extractTextFromImage } = await import('./ocr');
+        const result = await extractTextFromImage(env.AI, buffer, item.name);
+        return new Response(
+          `Newspaper: ${item.name}\nThumb URL: ${item.thumb}\nModel: ${result.model}\n\n${result.text}`,
+          { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+        );
       }
 
       // OCR endpoint — check R2 cache first; if missing, kick off background
